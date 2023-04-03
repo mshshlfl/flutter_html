@@ -5,8 +5,8 @@ import 'package:flutter_html/html_parser.dart';
 import 'package:flutter_html/src/navigation_delegate.dart';
 import 'package:flutter_html/src/replaced_element.dart';
 import 'package:flutter_html/style.dart';
-import 'package:webview_flutter/webview_flutter.dart' as webview;
 import 'package:html/dom.dart' as dom;
+import 'package:webview_flutter/webview_flutter.dart' as webview;
 
 /// [IframeContentElement is a [ReplacedElement] with web content.
 class IframeContentElement extends ReplacedElement {
@@ -28,32 +28,75 @@ class IframeContentElement extends ReplacedElement {
   @override
   Widget toWidget(RenderContext context) {
     final sandboxMode = attributes["sandbox"];
-    return Container(
-      width: width ?? (height ?? 150) * 2,
-      height: height ?? (width ?? 300) / 2,
-      child: ContainerSpan(
-        style: context.style,
-        newContext: context,
-        child: webview.WebView(
-          initialUrl: src,
-          key: key,
-          javascriptMode: sandboxMode == null || sandboxMode == "allow-scripts"
-            ? webview.JavascriptMode.unrestricted
-            : webview.JavascriptMode.disabled,
-        navigationDelegate: (request) async {
-          final result = await navigationDelegate!(NavigationRequest(
-            url: request.url,
-            isForMainFrame: request.isForMainFrame,
-          ));
-          if (result == NavigationDecision.prevent) {
-            return webview.NavigationDecision.prevent;
-          } else {
-            return webview.NavigationDecision.navigate;
-          }
-        },
-          gestureRecognizers: {
-            Factory<VerticalDragGestureRecognizer>(() => VerticalDragGestureRecognizer())
+    return IFrameContainer(
+      width: width,
+      height: height,
+      name: name,
+      navigationDelegate: navigationDelegate,
+      renderContext: context,
+      sandBoxMode: sandboxMode,
+      src: src,
+    );
+  }
+}
+
+class IFrameContainer extends StatefulWidget {
+  final String? src;
+  final double? width;
+  final double? height;
+  final NavigationDelegate? navigationDelegate;
+  final UniqueKey key = UniqueKey();
+  final RenderContext renderContext;
+  final String? sandBoxMode;
+
+  IFrameContainer({
+    required String name,
+    required this.src,
+    required this.width,
+    required this.height,
+    required this.navigationDelegate,
+    required this.renderContext,
+    required this.sandBoxMode,
+  });
+
+  @override
+  State<IFrameContainer> createState() => _IFrameContainerState();
+}
+
+class _IFrameContainerState extends State<IFrameContainer> {
+  late final webview.WebViewController _webViewController;
+
+  @override
+  void initState() {
+    super.initState();
+    _webViewController = webview.WebViewController()
+      ..loadHtmlString(widget.src!)
+      ..setJavaScriptMode(
+        widget.sandBoxMode == null || widget.sandBoxMode == "allow-scripts" ? webview.JavaScriptMode.unrestricted : webview.JavaScriptMode.disabled,
+      )
+      ..setNavigationDelegate(
+        webview.NavigationDelegate(
+          onNavigationRequest: (request) async {
+            final result = await widget.navigationDelegate!(NavigationRequest(url: request.url, isForMainFrame: request.isMainFrame));
+
+            return result == NavigationDecision.prevent ? webview.NavigationDecision.prevent : webview.NavigationDecision.navigate;
           },
+        ),
+      );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: widget.width ?? (widget.height ?? 150) * 2,
+      height: widget.height ?? (widget.width ?? 300) / 2,
+      child: ContainerSpan(
+        style: widget.renderContext.style,
+        newContext: widget.renderContext,
+        child: webview.WebViewWidget(
+          controller: _webViewController,
+          key: widget.key,
+          gestureRecognizers: {Factory<VerticalDragGestureRecognizer>(() => VerticalDragGestureRecognizer())},
         ),
       ),
     );
